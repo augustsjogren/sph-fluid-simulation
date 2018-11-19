@@ -1,0 +1,2 @@
+commandPort -name "localhost:7001" -sourceType "mel" -echoOutput; 
+commandPort -name "localhost:7002" -sourceType "python" -echoOutput;
