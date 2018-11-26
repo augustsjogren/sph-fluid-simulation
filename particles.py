@@ -17,13 +17,14 @@ if len(particleList) > 0:
 cmds.polyCube(sx=10, sy=15, sz=5, w=5, d=5, h=0.01, name='ground')
 
 noParticles = 0
+h = 0.1
 
 # Create  a cube of particles
 for i in range(5):
     for j in range(5):
         for k in range(5):
             particle = cmds.polySphere(n='myParticle#', sx=2, sy=2, r=0.05)
-            cmds.move(i * 0.1, 2 + j * 0.1, k * 0.1, particle)
+            cmds.move(i * h, 0.2 + j * h, k * h, particle)
             noParticles += 1
 
 #particleList = cmds.ls('myParticle*')
@@ -50,6 +51,7 @@ class Particle:
         self.density = 1
         self.pressure = 1
         self.acceleration = [0, 0, 0]
+        self.velocity = [0, 0, 0]
 
 # --------------- Functions -----------------
 
@@ -82,11 +84,10 @@ def getNeighbors(particle, smoothingLength):
 
 
 def applyPoly6Kernel(particleDistance):
-    smoothingRadius = 0.2
 
-    output = ((315/(64 * math.pi * math.pow(smoothingRadius, 9))) *
-              math.pow((math.pow(smoothingRadius, 2) -
-                        math.pow(particleDistance, 2)), 3)
+    output = ((315/(64 * math.pi * math.pow(h, 9))) *
+              math.pow((math.pow(h, 2) -
+                        math.pow(h, 2)), 3)
               )
 
     return output
@@ -163,15 +164,27 @@ def calculateAcceleration(neighbors, particle, particleMass, particlePressure, p
     # print(particle.pressure)
 
     for neighbor in neighbors:
-        spikyGradient = calculateSpikyKernel(0.2, particle, neighbor)
+        spikyGradient = calculateSpikyKernel(h, particle, neighbor)
 
-        acceleration[0] = -(particleMass/particleMass) * ((neighbor.pressure +
-                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[0]
-        acceleration[1] = -(particleMass/particleMass) * ((neighbor.pressure +
-                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[1]
-        acceleration[2] = -(particleMass/particleMass) * ((neighbor.pressure +
-                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[2]
+        vector = getDistanceVector(neighbor, particle)
+        magnitude  = math.sqrt( math.pow(vector[0], 2)+ math.pow(vector[1], 2)+ math.pow(vector[2], 2))
+        normalizedVector  = ( vector[0] / magnitude ,  vector[1] / magnitude,  vector[2] / magnitude )
+
+        acceleration[0] += -(particleMass/particleMass) * ((neighbor.pressure +
+                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[0] * normalizedVector[0]
+        acceleration[1] += -(particleMass/particleMass) * ((neighbor.pressure +
+                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[1] * normalizedVector[1]
+        acceleration[2] += -(particleMass/particleMass) * ((neighbor.pressure +
+                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[2] * normalizedVector[2]
+
+    print(acceleration)
     return acceleration
+
+# Make the particles collide with surfaces
+def checkBoundaries(position, particle):
+    if position[1] < 0.0:
+        position[1] = 0.0
+        particle.velocity[1] = 0.0
 
 
 # Animation
@@ -236,7 +249,7 @@ while currentTime < endTime:
 
         # --------- Calculate! -------------
 
-        particleNeighbors = getNeighbors(currentParticle, 0.2)
+        particleNeighbors = getNeighbors(currentParticle, h)
 
         # print(particleNeighbors)
 
@@ -261,6 +274,7 @@ while currentTime < endTime:
 
         # Apply gravity
         velocity = [i * (currentTime / 100) for i in totalAcceleration]
+        currentParticle.velocity = velocity
 
         # print(velocity)
 
@@ -273,8 +287,11 @@ while currentTime < endTime:
         nextPosition[2] = currentParticle.position[2] + \
             (velocity[2] * currentTime * mass)
 
+        checkBoundaries(nextPosition, currentParticle)
+
         currentParticle.position = nextPosition
 
+        
         # Set keyframes for animating the particles
         cmds.setKeyframe(currentParticle.name, attribute='translateX',
                          v=nextPosition[0], t=currentTime)
