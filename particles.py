@@ -43,7 +43,7 @@ particleList = cmds.ls('myParticle*', type='transform', showType=False)
 cmds.cutKey()
 
 class Particle:
-    mass = 0.01
+    mass = 0.000001
 
     def __init__(self):
         self.name = "unset"
@@ -87,7 +87,7 @@ def applyPoly6Kernel(particleDistance):
 
     output = ((315/(64 * math.pi * math.pow(h, 9))) *
               math.pow((math.pow(h, 2) -
-                        math.pow(h, 2)), 3)
+                        math.pow(particleDistance, 2)), 3)
               )
 
     return output
@@ -97,20 +97,20 @@ def calculateDensity(particle,  particleMass, neighbors):
 
     # print(neighbors)
 
-    density = 40
+    density = 20
     for neighbor in neighbors:
         distanceToNeighbor = calculateDistance(particle, neighbor)
         density += particleMass * applyPoly6Kernel(distanceToNeighbor)
 
-    if density < 40:
-        density = 40
+    if density < 20:
+        density = 20
 
     return density
 
 
 def calculatePressure(particleDensity):
-    p0 = 40
-    K = 40
+    p0 = 20
+    K = 20
     pressure = K * (particleDensity - p0)
 
     # print(pressure)
@@ -177,7 +177,6 @@ def calculateAcceleration(neighbors, particle, particleMass, particlePressure, p
         acceleration[2] += -(particleMass/particleMass) * ((neighbor.pressure +
                                                            particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[2] * normalizedVector[2]
 
-    print(acceleration)
     return acceleration
 
 # Make the particles collide with surfaces
