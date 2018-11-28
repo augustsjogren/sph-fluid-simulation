@@ -8,6 +8,10 @@ import math
 if cmds.ls('ground'):
     cmds.delete('ground')
 
+walls = cmds.ls('wall*')
+if len(walls) > 0:
+    cmds.delete(walls)
+
 particleList = cmds.ls('myParticle*')
 
 if len(particleList) > 0:
@@ -16,15 +20,41 @@ if len(particleList) > 0:
 # Create the ground plane
 cmds.polyCube(sx=10, sy=15, sz=5, w=5, d=5, h=0.01, name='ground')
 
+
+xMax = 1
+xMin = -xMax
+
+yMin = 0.0
+
+zMax = 1
+zMin = -zMax 
+
+# Create the walls
+wall = cmds.polyCube(sx=10, sy=15, sz=15, w=2*zMax, d=0.01, name='wall1')
+cmds.move(0, 0.5, zMin, wall)
+wall = cmds.polyCube(sx=10, sy=15, sz=15, w=2*zMax, d=0.01, name='wall2')
+cmds.move(0, 0.5, zMax, wall)
+
+wall = cmds.polyCube(sx=10, sy=15, sz=15, w=0.01, d=2*xMax, name='wall3')
+cmds.move(xMax, 0.5, 0, wall)
+wall = cmds.polyCube(sx=10, sy=15, sz=15, w=0.01, d=2*xMax, name='wall4')
+cmds.move(xMin, 0.5, 0, wall)
+
+
 noParticles = 0
 h = 0.1
+initialDensity = 10
+
+height = 5
+width = 5
+depth = 5
 
 # Create  a cube of particles
-for i in range(5):
-    for j in range(5):
-        for k in range(5):
-            particle = cmds.polySphere(n='myParticle#', sx=2, sy=2, r=0.05)
-            cmds.move(i * h, 0.2 + j * h, k * h, particle)
+for i in range(width):
+    for j in range(height):
+        for k in range(depth):
+            particle = cmds.polySphere(n='myParticle#', sx=2, sy=2, r=h/2)
+            cmds.move( i * h, h + j * h,  k * h, particle)
             noParticles += 1
 
 #particleList = cmds.ls('myParticle*')
@@ -48,7 +78,7 @@ class Particle:
     def __init__(self):
         self.name = "unset"
         self.position = [0, 0, 0]
-        self.density = 1
+        self.density = initialDensity
         self.pressure = 1
         self.acceleration = [0, 0, 0]
         self.velocity = [0, 0, 0]
@@ -97,19 +127,19 @@ def calculateDensity(particle,  particleMass, neighbors):
 
     # print(neighbors)
 
-    density = 20
+    density = initialDensity
     for neighbor in neighbors:
         distanceToNeighbor = calculateDistance(particle, neighbor)
         density += particleMass * applyPoly6Kernel(distanceToNeighbor)
 
-    if density < 20:
-        density = 20
+    if density < initialDensity:
+        density = initialDensity
 
     return density
 
 
 def calculatePressure(particleDensity):
-    p0 = 20
+    p0 = initialDensity
     K = 20
     pressure = K * (particleDensity - p0)
 
@@ -180,10 +210,32 @@ def calculateAcceleration(neighbors, particle, particleMass, particlePressure, p
     return acceleration
 
 # Make the particles collide with surfaces
-def checkBoundaries(position, particle):
-    if position[1] < 0.0:
-        position[1] = 0.0
+def checkBoundaries(particle):
+
+    offset = h
+    
+    # X
+    if particle.position[0] + offset > xMax or particle.position[0] - offset < xMin:
+        particle.velocity[0] *= -0.0
+
+        if particle.position[0] + offset > xMax:
+            particle.position[0] = xMax - offset
+        else:
+            particle.position[0] = xMin + offset
+
+     # Y
+    if particle.position[1] - offset < yMin:
+        particle.position[1] = yMin + offset
         particle.velocity[1] = 0.0
+
+    # Z
+    if particle.position[2] + offset > zMax or particle.position[2] - offset < zMin:
+        particle.velocity[2] *= -0.0
+
+        if particle.position[2] + offset > zMax:
+            particle.position[2] = zMax - offset
+        else:
+            particle.position[2] = zMin + offset
 
 
 # Animation
@@ -271,33 +323,50 @@ while currentTime < endTime:
 
         # print(totalAcceleration)
 
-        # Apply gravity
-        velocity = [i * (currentTime / 100) for i in totalAcceleration]
-        currentParticle.velocity = velocity
+        # C++ code
+        # p.v += DT*p.f/p.rho;
+        # p.x += DT*p.v;
+
+        dt = 0.01
+
+        currentParticle.velocity[0] += (dt * totalAcceleration[0] ) / currentParticle.density
+        currentParticle.velocity[1] += (dt * totalAcceleration[1] ) / currentParticle.density
+        currentParticle.velocity[2] += (dt * totalAcceleration[2] ) / currentParticle.density
+
+        nextPosition = [0, 0, 0]
+
+        currentParticle.position[0] += dt * currentParticle.velocity[0]
+        currentParticle.position[1] += dt * currentParticle.velocity[1]
+        currentParticle.position[2] += dt * currentParticle.velocity[2]
+
+
+        # velocity = [i * (currentTime / 100) for i in totalAcceleration]
+        # currentParticle.velocity = velocity
 
         # print(velocity)
 
-        nextPosition = currentParticle.position
+        
+        # checkBoundaries(currentParticle)
         # print(nextPosition)
-        nextPosition[0] = currentParticle.position[0] + \
-            (velocity[0] * currentTime * mass)
-        nextPosition[1] = currentParticle.position[1] + \
-            (velocity[1] * currentTime * mass)
-        nextPosition[2] = currentParticle.position[2] + \
-            (velocity[2] * currentTime * mass)
+        # nextPosition[0] = currentParticle.position[0] + \
+        #     (currentParticle.velocity[0] * currentTime * currentParticle.mass)
+        # nextPosition[1] = currentParticle.position[1] + \
+        #     (currentParticle.velocity[1] * currentTime * currentParticle.mass)
+        # nextPosition[2] = currentParticle.position[2] + \
+        #     (currentParticle.velocity[2] * currentTime * currentParticle.mass)
 
-        checkBoundaries(nextPosition, currentParticle)
-
-        currentParticle.position = nextPosition
+       
+        # checkBoundaries(nextPosition, currentParticle)
+        # currentParticle.position = nextPosition
 
         
         # Set keyframes for animating the particles
         cmds.setKeyframe(currentParticle.name, attribute='translateX',
-                         v=nextPosition[0], t=currentTime)
+                         v=currentParticle.position[0], t=currentTime)
         cmds.setKeyframe(currentParticle.name, attribute='translateY',
-                         v=nextPosition[1], t=currentTime)
+                         v=currentParticle.position[1], t=currentTime)
         cmds.setKeyframe(currentParticle.name, attribute='translateZ',
-                         v=nextPosition[2], t=currentTime)
+                         v=currentParticle.position[2], t=currentTime)
 
         # Update progress bar
         cmds.progressBar(progressControl, edit=True, step=1)
