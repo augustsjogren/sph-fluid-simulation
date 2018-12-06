@@ -1,6 +1,7 @@
 import maya.cmds as cmds
 import datetime
 import math
+import random
 
 # -----SETUP----------------
 
@@ -21,41 +22,53 @@ if len(particleList) > 0:
 cmds.polyCube(sx=10, sy=15, sz=5, w=5, d=5, h=0.01, name='ground')
 
 
-xMax = 1
+xMax = 0.4
 xMin = -xMax
 
 yMin = 0.0
 
-zMax = 1
+zMax = 0.4
 zMin = -zMax 
 
 # Create the walls
-wall = cmds.polyCube(sx=10, sy=15, sz=15, w=2*zMax, d=0.01, name='wall1')
-cmds.move(0, 0.5, zMin, wall)
-wall = cmds.polyCube(sx=10, sy=15, sz=15, w=2*zMax, d=0.01, name='wall2')
-cmds.move(0, 0.5, zMax, wall)
+# wall = cmds.polyCube(sx=10, sy=15, sz=15, h=xMax, w=2*zMax, d=0.01, name='wall1')
+# cmds.move(0, xMax, zMin, wall)
+# wall = cmds.polyCube(sx=10, sy=15, sz=15, h=xMax, w=2*zMax, d=0.01, name='wall2')
+# cmds.move(0,xMax, zMax, wall)
 
-wall = cmds.polyCube(sx=10, sy=15, sz=15, w=0.01, d=2*xMax, name='wall3')
-cmds.move(xMax, 0.5, 0, wall)
-wall = cmds.polyCube(sx=10, sy=15, sz=15, w=0.01, d=2*xMax, name='wall4')
-cmds.move(xMin, 0.5, 0, wall)
+# wall = cmds.polyCube(sx=10, sy=15, h=xMax, sz=15, w=0.01, d=2*xMax, name='wall3')
+# cmds.move(xMax, xMax, 0, wall)
+# wall = cmds.polyCube(sx=10, sy=15, h=xMax, sz=15, w=0.01, d=2*xMax, name='wall4')
+# cmds.move(xMin, xMax, 0, wall)
 
 
 noParticles = 0
 h = 0.1
-initialDensity = 10
+hsq = math.pow(h,2)
+initialDensity = 1000
 
-height = 5
+VISC = 50;
+
+
+POLY6 = 315/(65*math.pi*math.pow(h, 9))
+SPIKY_GRAD = -45/(math.pi*math.pow(h, 6))
+VISC_LAP = 45/(math.pi*math.pow(h, 6))
+
+
+height = 10
 width = 5
 depth = 5
 
+level = 0
 # Create  a cube of particles
 for i in range(width):
     for j in range(height):
         for k in range(depth):
+            nudge = random.uniform(0.0, 0.05)
             particle = cmds.polySphere(n='myParticle#', sx=2, sy=2, r=h/2)
-            cmds.move( i * h, h + j * h,  k * h, particle)
+            cmds.move( i * h - width/2*h + nudge, h + j * h,  k * h - depth/2 * h + nudge, particle)
             noParticles += 1
+        level += 1
 
 #particleList = cmds.ls('myParticle*')
 print str(noParticles) + " particles created"
@@ -73,13 +86,14 @@ particleList = cmds.ls('myParticle*', type='transform', showType=False)
 cmds.cutKey()
 
 class Particle:
-    mass = 0.000001
+    mass = 0.60
 
     def __init__(self):
         self.name = "unset"
         self.position = [0, 0, 0]
         self.density = initialDensity
         self.pressure = 1
+        self.force = [0, 0, 0]
         self.acceleration = [0, 0, 0]
         self.velocity = [0, 0, 0]
 
@@ -105,7 +119,7 @@ def getNeighbors(particle, smoothingLength):
         distance = math.sqrt(math.pow( deltadist[0], 2) + math.pow(deltadist[1], 2) + math.pow(deltadist[2], 2))
 
         # if distance <= smoothingLength, put in array
-        if distance <= smoothingLength and distance > 0:
+        if distance <= h and distance > 0:
             neighbours.append(particles[index])
 
         index += 1
@@ -113,37 +127,24 @@ def getNeighbors(particle, smoothingLength):
     return neighbours
 
 
-def applyPoly6Kernel(particleDistance):
-
-    output = ((315/(64 * math.pi * math.pow(h, 9))) *
-              math.pow((math.pow(h, 2) -
-                        math.pow(particleDistance, 2)), 3)
-              )
-
-    return output
-
 # Calculate the density based on all neighbors within the smoothingRadius
-def calculateDensity(particle,  particleMass, neighbors):
+def calculateDensity(particle, neighbors):
 
-    # print(neighbors)
+    density = 0
+    for neighbor in particles:
 
-    density = initialDensity
-    for neighbor in neighbors:
-        distanceToNeighbor = calculateDistance(particle, neighbor)
-        density += particleMass * applyPoly6Kernel(distanceToNeighbor)
+        distanceToNeighbor = calculateDistance(neighbor, particle)
+        squareDist = math.pow(distanceToNeighbor, 2)
 
-    if density < initialDensity:
-        density = initialDensity
+        if squareDist < hsq:
+            density += particle.mass* POLY6 * math.pow(hsq - squareDist, 3)
 
     return density
 
 
-def calculatePressure(particleDensity):
-    p0 = initialDensity
-    K = 20
-    pressure = K * (particleDensity - p0)
-
-    # print(pressure)
+def calculatePressure(particle):
+    K = 11
+    pressure = K * (particle.density - initialDensity)
     return pressure
 
 
@@ -151,8 +152,7 @@ def calculateDistance(p1, p2):
 
     distanceVector = getDistanceVector(p1, p2)
 
-    distance = math.sqrt(math.pow(
-        distanceVector[0], 2) + math.pow(distanceVector[1], 2) + math.pow(distanceVector[2], 2))
+    distance = math.sqrt(math.pow( distanceVector[0], 2) + math.pow(distanceVector[1], 2) + math.pow(distanceVector[2], 2))
 
     # print(distance)
 
@@ -172,51 +172,48 @@ def getDistanceVector(p1, p2):
     return distanceVector
 
 
-def calculateSpikyKernel(smoothingRadius, particle, neighbor):
-
-    distanceVec = getDistanceVector(particle, neighbor)
-
-    gX = (45 / (math.pi * math.pow(smoothingRadius, 6))) * \
-        math.pow((smoothingRadius - distanceVec[0]), 2)
-    gY = (45 / (math.pi * math.pow(smoothingRadius, 6))) * \
-        math.pow((smoothingRadius - distanceVec[1]), 2)
-    gZ = (45 / (math.pi * math.pow(smoothingRadius, 6))) * \
-        math.pow((smoothingRadius - distanceVec[2]), 2)
-
-    gradient = [gX, gY, gZ]
-    return gradient
-
-
-def calculateAcceleration(neighbors, particle, particleMass, particlePressure, particleDensity):
-    acceleration = [0, 0, 0]
-
-    # print(particlePressure)
-    # print(particle.pressure)
+def calculateForces(particle, neighbors):
+    fPressure = [0, 0, 0]
+    fGravity = [0, 0, 0]
+    fVisc = [0, 0, 0]
 
     for neighbor in neighbors:
-        spikyGradient = calculateSpikyKernel(h, particle, neighbor)
-
         vector = getDistanceVector(neighbor, particle)
         magnitude  = math.sqrt( math.pow(vector[0], 2)+ math.pow(vector[1], 2)+ math.pow(vector[2], 2))
-        normalizedVector  = ( vector[0] / magnitude ,  vector[1] / magnitude,  vector[2] / magnitude )
+        normalizedVector  = ( vector[0] / magnitude ,  vector[1] / magnitude,  vector[2] / magnitude ) 
 
-        acceleration[0] += -(particleMass/particleMass) * ((neighbor.pressure +
-                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[0] * normalizedVector[0]
-        acceleration[1] += -(particleMass/particleMass) * ((neighbor.pressure +
-                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[1] * normalizedVector[1]
-        acceleration[2] += -(particleMass/particleMass) * ((neighbor.pressure +
-                                                           particle.pressure) / (2*particleDensity*neighbor.density)) * spikyGradient[2] * normalizedVector[2]
 
-    return acceleration
+        fPressure[0] += normalizedVector[0] * particle.mass * (particle.pressure + neighbor.pressure) / (2*neighbor.density) * SPIKY_GRAD*math.pow(h-magnitude, 2)
+        fPressure[1] += normalizedVector[1] * particle.mass * (particle.pressure + neighbor.pressure) / (2*neighbor.density) * SPIKY_GRAD*math.pow(h-magnitude, 2)
+        fPressure[2] += normalizedVector[2] * particle.mass * (particle.pressure + neighbor.pressure) / (2*neighbor.density) * SPIKY_GRAD*math.pow(h-magnitude, 2)
+
+        fVisc[0] += VISC*particle.mass*(neighbor.velocity[0] - particle.velocity[0])/neighbor.density * VISC_LAP*(h-magnitude);
+        fVisc[1] += VISC*particle.mass*(neighbor.velocity[1] - particle.velocity[1])/neighbor.density * VISC_LAP*(h-magnitude);
+        fVisc[2] += VISC*particle.mass*(neighbor.velocity[2] - particle.velocity[2])/neighbor.density * VISC_LAP*(h-magnitude);
+
+
+    fGravity[1] = gravity[1] * particle.density
+
+    # print(fPressure)
+
+    totalforce = [x + y for x, y in zip(fPressure, fGravity)]
+    totalforce = [x + y for x, y in zip(totalforce, fVisc)]
+
+    # print(fPressure)
+
+    return totalforce
+
 
 # Make the particles collide with surfaces
 def checkBoundaries(particle):
 
     offset = h
+
+    damping = -0.0
     
     # X
     if particle.position[0] + offset > xMax or particle.position[0] - offset < xMin:
-        particle.velocity[0] *= -0.0
+        particle.velocity[0] *= damping
 
         if particle.position[0] + offset > xMax:
             particle.position[0] = xMax - offset
@@ -226,16 +223,33 @@ def checkBoundaries(particle):
      # Y
     if particle.position[1] - offset < yMin:
         particle.position[1] = yMin + offset
-        particle.velocity[1] = 0.0
+        particle.velocity[1] *= damping
 
     # Z
     if particle.position[2] + offset > zMax or particle.position[2] - offset < zMin:
-        particle.velocity[2] *= -0.0
+        particle.velocity[2] *= damping
 
         if particle.position[2] + offset > zMax:
             particle.position[2] = zMax - offset
         else:
             particle.position[2] = zMin + offset
+
+
+
+# Integrate to find new position and velocity
+def calculateNewPosition(particle):
+
+    dt = 0.008
+
+    particle.velocity[0] += dt * particle.force[0]/particle.density
+    particle.velocity[1] += dt * particle.force[1]/particle.density
+    particle.velocity[2] += dt * particle.force[2]/particle.density
+
+    particle.position[0] += dt * particle.velocity[0]
+    particle.position[1] += dt * particle.velocity[1]
+    particle.position[2] += dt * particle.velocity[2]
+
+    checkBoundaries(particle)
 
 
 # Animation
@@ -284,9 +298,10 @@ def initialSetup():
 
 initialSetup()
 
-
 # Main simulaiton loop
 while currentTime < endTime:
+
+    # print("Frame " + str(currentTime))
 
     # Loop all particles
     for p in range(noParticles):
@@ -304,61 +319,23 @@ while currentTime < endTime:
 
         # print(particleNeighbors)
 
-        currentParticle.density = calculateDensity(
-            currentParticle, currentParticle.mass, particleNeighbors)
+        currentParticle.density = calculateDensity(currentParticle, particleNeighbors)
 
         # print(currentParticle.density)
 
-        currentParticle.pressure = calculatePressure(currentParticle.density)
+        currentParticle.pressure = calculatePressure(currentParticle)
 
         # print(currentParticle.pressure)
 
-        currentParticle.acceleration = calculateAcceleration(
-            particleNeighbors, currentParticle, currentParticle.mass, currentParticle.pressure, currentParticle.density)
+        currentParticle.force = calculateForces(currentParticle, particleNeighbors)
 
-        # print(currentParticle.acceleration)
-
-        totalAcceleration = currentParticle.acceleration
-        totalAcceleration[1] += gravity[1]
-
-        # print(totalAcceleration)
-
-        # C++ code
-        # p.v += DT*p.f/p.rho;
-        # p.x += DT*p.v;
-
-        dt = 0.01
-
-        currentParticle.velocity[0] += (dt * totalAcceleration[0] ) / currentParticle.density
-        currentParticle.velocity[1] += (dt * totalAcceleration[1] ) / currentParticle.density
-        currentParticle.velocity[2] += (dt * totalAcceleration[2] ) / currentParticle.density
+        # print(currentParticle.force[1])
 
         nextPosition = [0, 0, 0]
 
-        currentParticle.position[0] += dt * currentParticle.velocity[0]
-        currentParticle.position[1] += dt * currentParticle.velocity[1]
-        currentParticle.position[2] += dt * currentParticle.velocity[2]
+        calculateNewPosition(currentParticle)
 
-
-        # velocity = [i * (currentTime / 100) for i in totalAcceleration]
-        # currentParticle.velocity = velocity
-
-        # print(velocity)
-
-        
-        # checkBoundaries(currentParticle)
-        # print(nextPosition)
-        # nextPosition[0] = currentParticle.position[0] + \
-        #     (currentParticle.velocity[0] * currentTime * currentParticle.mass)
-        # nextPosition[1] = currentParticle.position[1] + \
-        #     (currentParticle.velocity[1] * currentTime * currentParticle.mass)
-        # nextPosition[2] = currentParticle.position[2] + \
-        #     (currentParticle.velocity[2] * currentTime * currentParticle.mass)
-
-       
-        # checkBoundaries(nextPosition, currentParticle)
-        # currentParticle.position = nextPosition
-
+        # print(currentParticle.velocity)
         
         # Set keyframes for animating the particles
         cmds.setKeyframe(currentParticle.name, attribute='translateX',
