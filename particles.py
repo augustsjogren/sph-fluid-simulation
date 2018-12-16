@@ -18,28 +18,15 @@ particleList = cmds.ls('myParticle*')
 if len(particleList) > 0:
     cmds.delete(particleList)
 
-# Create the ground plane
-cmds.polyCube(sx=10, sy=15, sz=5, w=5, d=5, h=0.01, name='ground')
+# Number of particles
 
+# height = 6
+# width = 10
+# depth = 10
 
-xMax = 0.4
-xMin = -xMax
-
-yMin = 0.0
-
-zMax = 0.4
-zMin = -zMax 
-
-# Create the walls
-# wall = cmds.polyCube(sx=10, sy=15, sz=15, h=xMax, w=2*zMax, d=0.01, name='wall1')
-# cmds.move(0, xMax, zMin, wall)
-# wall = cmds.polyCube(sx=10, sy=15, sz=15, h=xMax, w=2*zMax, d=0.01, name='wall2')
-# cmds.move(0,xMax, zMax, wall)
-
-# wall = cmds.polyCube(sx=10, sy=15, h=xMax, sz=15, w=0.01, d=2*xMax, name='wall3')
-# cmds.move(xMax, xMax, 0, wall)
-# wall = cmds.polyCube(sx=10, sy=15, h=xMax, sz=15, w=0.01, d=2*xMax, name='wall4')
-# cmds.move(xMin, xMax, 0, wall)
+height = 6
+width = 14
+depth = 14
 
 
 noParticles = 0
@@ -47,26 +34,63 @@ h = 0.1
 hsq = math.pow(h,2)
 initialDensity = 1000
 
-VISC = 50;
+VISC = 40;
 
 
 POLY6 = 315/(65*math.pi*math.pow(h, 9))
 SPIKY_GRAD = -45/(math.pi*math.pow(h, 6))
 VISC_LAP = 45/(math.pi*math.pow(h, 6))
 
+# xMax = 0.6
+# xMin = -xMax
 
-height = 10
-width = 5
-depth = 5
+# yMin = 0.0
+
+# zMax = 0.6
+# zMin = -zMax
+
+xMax = width * h / 2 + h
+xMin = -xMax
+
+yMin = 0.0
+yMax = height * h / 2
+
+zMax = depth * h / 2 + h
+zMin = -zMax  
+
+# Create the ground plane
+cmds.polyCube(sx=10, sy=15, sz=5, w=2*zMax, d=2*xMax, h=0.01, name='ground')
+
+# Create the walls
+wall = cmds.polyCube(sx=10, sy=15, sz=15, h=yMax, w=2*zMax, d=0.01, name='wall1')
+cmds.move(0, yMax/2, zMin, wall)
+wall = cmds.polyCube(sx=10, sy=15, sz=15, h=yMax, w=2*zMax, d=0.01, name='wall2')
+cmds.move(0,yMax/2, zMax, wall)
+
+wall = cmds.polyCube(sx=10, sy=15, h=yMax, sz=15, w=0.01, d=2*xMax, name='wall3')
+cmds.move(xMax, yMax/2, 0, wall)
+wall = cmds.polyCube(sx=10, sy=15, h=yMax, sz=15, w=0.01, d=2*xMax, name='wall4')
+cmds.move(xMin, yMax/2, 0, wall)
+
 
 level = 0
-# Create  a cube of particles
+# Create  a wave  of particles
+# for i in range(width):
+#     for j in range(height):
+#         for k in range(depth):
+#             nudge = random.uniform(0.0, 0.05)
+#             particle = cmds.polySphere(n='myParticle#', sx=2, sy=2, r=h/2)
+#             cmds.move( i * h - width/2*h + nudge, h/2 + j * h,  k * h - depth/2 * h + nudge, particle)
+#             noParticles += 1
+#         level += 1
+
+# Create  a box  of particles
 for i in range(width):
     for j in range(height):
         for k in range(depth):
             nudge = random.uniform(0.0, 0.05)
             particle = cmds.polySphere(n='myParticle#', sx=2, sy=2, r=h/2)
-            cmds.move( i * h - width/2*h + nudge, h + j * h,  k * h - depth/2 * h + nudge, particle)
+            cmds.move( i * h - width/2*h + nudge, h/2 + j * h,  k * h - depth/2 * h + nudge, particle)
             noParticles += 1
         level += 1
 
@@ -95,7 +119,7 @@ class Particle:
         self.pressure = 1
         self.force = [0, 0, 0]
         self.acceleration = [0, 0, 0]
-        self.velocity = [0, 0, 0]
+        self.velocity = [-3, 0, 0]
 
 # --------------- Functions -----------------
 
@@ -210,36 +234,52 @@ def checkBoundaries(particle):
     offset = h
 
     damping = -0.0
+
+    atEdge = 0
     
     # X
     if particle.position[0] + offset > xMax or particle.position[0] - offset < xMin:
         particle.velocity[0] *= damping
+        atEdge = 1
 
         if particle.position[0] + offset > xMax:
             particle.position[0] = xMax - offset
         else:
             particle.position[0] = xMin + offset
 
-     # Y
-    if particle.position[1] - offset < yMin:
-        particle.position[1] = yMin + offset
-        particle.velocity[1] *= damping
-
     # Z
     if particle.position[2] + offset > zMax or particle.position[2] - offset < zMin:
         particle.velocity[2] *= damping
+        atEdge = 1
 
         if particle.position[2] + offset > zMax:
             particle.position[2] = zMax - offset
         else:
             particle.position[2] = zMin + offset
 
+    # Y
+    if particle.position[1] - offset < yMin:
+        particle.position[1] = yMin + offset
+        particle.velocity[1] *= damping
+        particle.velocity[0] *= 0.95
+        particle.velocity[2] *= 0.95
+
+        # if atEdge == 1:
+        #     particle.velocity[0] *= 0.94
+        #     particle.velocity[1] *= 0.94
+
+
+
+    # Check for tilted plane
+    # if particle.position[1] < plane and particle.position[0] < plane:
+
+
 
 
 # Integrate to find new position and velocity
 def calculateNewPosition(particle):
 
-    dt = 0.008
+    dt = 0.006
 
     particle.velocity[0] += dt * particle.force[0]/particle.density
     particle.velocity[1] += dt * particle.force[1]/particle.density
